@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Monekraft</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <canvas id="gameCanvas" width="240" height="135" aria-label="Voxel sandbox game canvas"></canvas>
+
+    <div id="hud">
+      <div id="topLeft">
+        <div>Monekraft</div>
+        <div>WASD move, mouse look, Space jump</div>
+        <div>Left click break, Right click place</div>
+        <div>Use toolbar or 1-8 (top row or numpad, 7 = pickaxe), E inventory, F fullscreen</div>
+      </div>
+      <div id="debug"></div>
+      <div id="crosshair">+</div>
+      <div id="toolbar" aria-label="Block selection toolbar"></div>
+      <div id="inventoryPanel" aria-label="Inventory panel">
+        <h2>Inventory</h2>
+        <p>Select a toolbar slot, then click an inventory item to assign it.</p>
+        <div id="inventoryGrid"></div>
+      </div>
+      <div id="overlay">
+        <h1>Click to Play</h1>
+        <p>Capture the mouse to start. Press Esc to release.</p>
+      </div>
+    </div>
+
+    <script src="game.js"></script>
+  </body>
+</html>

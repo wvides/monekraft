@@ -1,0 +1,109 @@
+Original prompt: I want the game to also have a calming music in the brackground. I want the game to also have some animals that are around, a pig a sheep, a chicken.
+
+- DONE: Added calming background music that starts with gameplay and can be toggled/muted.
+- DONE: Added ambient animals (pig, sheep, chicken) that appear in-world and roam.
+- TODO: Validate visuals/state with Playwright client and inspect screenshot output.
+
+## Update 1
+- Added procedural calming background music using WebAudio (starts on first interaction), with `M` key mute toggle.
+- Added ambient animals in-world: pig, sheep, and chicken spawn on grass above water and roam around.
+- Added deterministic hooks: `window.render_game_to_text()` and `window.advanceTime(ms)`.
+- Added `F` fullscreen toggle and HUD readouts for music/animal state.
+
+## Test Notes
+- `node --check game.js` passes.
+- Playwright validation blocked: `/Users/waltervides/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js` fails with `ERR_MODULE_NOT_FOUND` for `playwright`.
+- Attempting `npx playwright --version` hangs in this sandbox (likely install/network restriction), so screenshot-driven verification is pending once Playwright is available.
+
+## TODO Next Agent
+- Install/enable `playwright` in this environment, then run the web-game Playwright client against local server and inspect gameplay screenshots for animal visibility and HUD/music state.
+- Verify music starts after first click and `M` toggles mute.
+
+## Update 2
+- Tuned background music to be calmer: reduced master loudness, softened high frequencies, slower LFO drift, and lower drone base notes.
+- Replaced brighter chord stack with a gentler two-voice drone plus a slow lead note pattern (3.4s cycle) using smooth gain envelopes.
+- Updated mute behavior to fade in/out (`setTargetAtTime`) instead of abrupt jumps.
+
+## Test Notes (Update 2)
+- `node --check game.js` passes after music changes.
+
+## Update 3
+- Increased on-screen animal readability by scaling sprite draw size up and expanding culling margins so animals stay visible when near screen edges.
+- Reworked pig/sheep/chicken rendering with per-animal details (legs, snouts/beaks, wool/ears/comb, accents, and shadows) while keeping the same canvas style.
+- Added an audio bus split (music + SFX) and new gameplay sounds: jump, footsteps, mining hit, and block placement.
+- Kept ambient music auto-start on first interaction and `M` toggle, now controlling full game audio output via master gain.
+
+## Test Notes (Update 3)
+- `node --check game.js` passes after animal + audio updates.
+- Playwright was intentionally not used for this update per explicit user request.
+
+## TODO Next Agent
+- Manually run the game in browser and tune SFX/music mix balance if needed on laptop speakers vs headphones.
+
+## Update 4
+- Removed animals from gameplay by clearing the spawn list (no pig/sheep/chicken spawn).
+- Disabled background music startup/toggle paths and removed music from HUD/debug output.
+- Updated HUD controls text to remove `M` music hint.
+
+## Test Notes (Update 4)
+- `node --check game.js` passes.
+
+## Update 5
+- Reworked terrain stratification so world columns are no longer mostly one dirt profile:
+  - Added broad regional rock noise to create grouped stone-heavy areas instead of fully random mixing.
+  - Added variable soil depth (thin/thick dirt cap) per region.
+  - Added occasional stone outcrops on surface in rocky regions.
+  - Increased stone prevalence with depth so lower layers are predominantly stone with fewer dirt pockets.
+- Kept deterministic generation using existing noise functions (no runtime randomness in terrain fill).
+
+## Test Notes (Update 5)
+- `node --check game.js` passes after terrain generation changes.
+- Playwright client still blocked in this environment: `ERR_MODULE_NOT_FOUND: Cannot find package 'playwright'` from `/Users/waltervides/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js`.
+
+## Update 6
+- Increased visible stone terrain patches near surface so stone appears in grouped above-ground areas, not only deep layers.
+- Added low-frequency surface rock patch noise plus detail noise to form broader rocky zones with natural edges.
+- Extended rocky-zone influence to shallow subsurface (`depth <= 2`) so rocky areas feel connected instead of single exposed blocks.
+
+## Test Notes (Update 6)
+- `node --check game.js` passes after surface-rock distribution update.
+- Playwright client remains blocked in this environment: missing `playwright` package for the skill client script.
+
+## Update 7
+- Added mountain-heavy terrain shaping in `terrainHeight()` to produce taller ridge/peak regions while preserving lowlands and water basins.
+- Added a random weather cycle (`sunny`, `rain`, `snow`) with per-state durations and smooth intensity transitions.
+- Added weather rendering: sky/fog tint shifts plus precipitation particles for rain/snow.
+- Added snow accumulation on exposed top surfaces during snow; snow cover is cleared when snow weather ends.
+- Updated mining/placement to refresh per-column surface cache so snow overlays stay accurate after terrain edits.
+- Exposed weather + snow coverage in HUD debug text and `window.render_game_to_text()`.
+
+## Test Notes (Update 7)
+- `node --check game.js` passes.
+- Ran skill client command:
+  - `node "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url http://127.0.0.1:8000 --actions-file "$HOME/.codex/skills/develop-web-game/references/action_payloads.json" --iterations 2 --pause-ms 200`
+- Playwright run is blocked in this environment with `ERR_MODULE_NOT_FOUND: Cannot find package 'playwright'`.
+
+## TODO Next Agent
+- Install/enable `playwright` in this environment, rerun the skill client, open generated screenshots, and verify weather transitions + snow top-layer visuals in gameplay.
+
+## Update 8
+- Reduced weather frequency so events feel occasional instead of constant.
+- Increased sunny duration window significantly.
+- Adjusted transition weights to strongly prefer sunny after rain/snow and reduce long precipitation streaks.
+
+## Test Notes (Update 8)
+- `node --check game.js` passes.
+- Playwright skill client rerun still blocked by missing `playwright` package (`ERR_MODULE_NOT_FOUND`).
+
+## Update 9
+- Strengthened terrain biome generation so above-ground stone appears in grouped rocky zones:
+  - Added low-frequency biome bands (`rockyBiome`) to create large rocky areas.
+  - Added mid-frequency patching (`rockyPatch`) so stone surfaces cluster naturally within those zones.
+  - Added highland stone behavior so higher terrain tends to expose stone faces.
+  - Reduced soil depth in rocky biomes and expanded shallow-stone patches (`depth <= 3`) to connect surface rock with near-surface strata.
+- Added per-run `WORLD_SEED` into terrain noise hashing so each page load creates a different procedural world layout.
+- Exposed seed in debug text and `render_game_to_text()` output for reproducibility checks.
+
+## Test Notes (Update 9)
+- `node --check game.js` passes after biome + seed changes.
+- Playwright skill client remains blocked in this environment: `ERR_MODULE_NOT_FOUND: Cannot find package 'playwright'`.
