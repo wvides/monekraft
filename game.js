@@ -458,6 +458,25 @@
       animal.turnTimer -= dt;
       animal.stepPhase += dt * (1.7 + animalTypes[animal.type].bob);
 
+      // Gravity - check if animal should fall
+      const blockBelow = getBlock(Math.floor(animal.x), Math.floor(animal.y) - 1, Math.floor(animal.z));
+      if (!isSolidBlock(blockBelow)) {
+        animal.vy = (animal.vy || 0) - 18 * dt;
+        animal.y += animal.vy * dt;
+        // Check if landed
+        const newBlockBelow = getBlock(Math.floor(animal.x), Math.floor(animal.y) - 1, Math.floor(animal.z));
+        if (isSolidBlock(newBlockBelow)) {
+          animal.y = Math.floor(animal.y - 1) + 2;
+          animal.vy = 0;
+        }
+        // Remove animal if fell out of world
+        if (animal.y < 0) {
+          animal.remove = true;
+        }
+        continue;
+      }
+      animal.vy = 0;
+
       if (animal.turnTimer <= 0) {
         animal.turnTimer = randomRange(1.1, 2.8);
         animal.dir += randomRange(-1.2, 1.2);
@@ -482,6 +501,10 @@
       animal.x = nx;
       animal.z = nz;
       animal.y = ny;
+    }
+    // Remove fallen animals
+    for (let i = animals.length - 1; i >= 0; i--) {
+      if (animals[i].remove) animals.splice(i, 1);
     }
   }
 
@@ -1550,6 +1573,9 @@
     const camY = player.y + player.height * 0.92;
     const camZ = player.z;
 
+    // Check if camera is in water
+    const camInWater = getBlock(Math.floor(camX), Math.floor(camY), Math.floor(camZ)) === BLOCK_WATER;
+
     const drawList = [];
     for (const animal of animals) {
       const wx = animal.x - camX;
@@ -1565,28 +1591,41 @@
       const dist = Math.hypot(wx, wy, wz);
       if (dist > 24) continue;
 
+      // Occlusion check - skip if solid block between camera and animal
       const rayHit = castRay(camX, camY, camZ, wx / dist, wy / dist, wz / dist, dist - 0.5);
-      if (rayHit && isSolidBlock(rayHit.block) && rayHit.dist < dist - 1.0) continue;
+      const isOccluded = rayHit && isSolidBlock(rayHit.block) && rayHit.dist < dist - 1.0;
+
+      // When camera is in water, also check direct line of sight to animal position
+      if (camInWater && !isOccluded) {
+        const groundCheck = getBlock(Math.floor(animal.x), Math.floor(animal.y) - 1, Math.floor(animal.z));
+        const betweenCheck = getBlock(
+          Math.floor((camX + animal.x) / 2),
+          Math.floor((camY + animal.y) / 2),
+          Math.floor((camZ + animal.z) / 2)
+        );
+        if (isSolidBlock(betweenCheck)) continue;
+      }
+
+      if (isOccluded) continue;
 
       const sx = RENDER_W * 0.5 + (yawX / (viewZ * tanHalfFov * aspect)) * (RENDER_W * 0.5);
       const syScreen = RENDER_H * 0.5 - (viewY / (viewZ * tanHalfFov)) * (RENDER_H * 0.5);
       if (sx < -30 || sx > RENDER_W + 30 || syScreen < -30 || syScreen > RENDER_H + 30) continue;
 
-      const occlusionAlpha = Math.min(1, Math.max(0.3, 1 - (rayHit ? (dist - rayHit.dist) / 3 : 0)));
-      drawList.push({ animal, sx, sy: syScreen, depth: viewZ, alpha: occlusionAlpha });
+      // Use actual distance for size, not viewZ
+      drawList.push({ animal, sx, sy: syScreen, depth: viewZ, dist: dist });
     }
 
     drawList.sort((a, b) => b.depth - a.depth);
     for (const entry of drawList) {
-      ctx.globalAlpha = entry.alpha;
-      drawAnimal(entry.animal, entry.sx, entry.sy, entry.depth);
-      ctx.globalAlpha = 1;
+      drawAnimal(entry.animal, entry.sx, entry.sy, entry.dist);
     }
   }
 
-  function drawAnimal(animal, sx, sy, depth) {
+  function drawAnimal(animal, sx, sy, dist) {
     const palette = animalTypes[animal.type];
-    const size = Math.max(7, Math.min(34, (26 / depth) * palette.scale));
+    // Size based on distance - larger when close, smaller when far
+    const size = Math.max(5, Math.min(45, (38 / Math.max(1, dist)) * palette.scale));
     const bob = Math.sin(animal.stepPhase * 2.2) * (size * 0.04);
     const step = Math.sin(animal.stepPhase * 6.2) * (size * 0.06);
     const facing = Math.sin(animal.dir - player.yaw) >= 0 ? 1 : -1;
