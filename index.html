@@ -25,8 +25,19 @@
         <div id="inventoryGrid"></div>
       </div>
       <div id="overlay">
-        <h1>Click to Play</h1>
-        <p>Capture the mouse to start. Press Esc to release.</p>
+        <div class="overlayCard">
+          <h1>Click to Play</h1>
+          <p>Capture the mouse to start. Press Esc to release.</p>
+          <div id="seedControls" aria-label="World seed controls">
+            <label for="seedInput">World seed</label>
+            <div class="seedRow">
+              <input id="seedInput" type="text" autocomplete="off" spellcheck="false" maxlength="64" />
+              <button id="applySeedBtn" type="button">Apply</button>
+              <button id="randomSeedBtn" type="button">Random</button>
+            </div>
+            <p>Use the same seed to generate the same world.</p>
+          </div>
+        </div>
       </div>
     </div>
 

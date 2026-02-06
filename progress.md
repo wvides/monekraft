@@ -107,3 +107,21 @@ Original prompt: I want the game to also have a calming music in the brackground
 ## Test Notes (Update 9)
 - `node --check game.js` passes after biome + seed changes.
 - Playwright skill client remains blocked in this environment: `ERR_MODULE_NOT_FOUND: Cannot find package 'playwright'`.
+
+## Update 10
+- Added explicit world seed controls on the start overlay (`World seed` input + `Apply` + `Random`).
+- World generation now resolves seed text from `?seed=...`, then localStorage fallback, then a random default.
+- Added deterministic seed normalization:
+  - Numeric seeds use their unsigned 32-bit value.
+  - Non-numeric seeds hash to a stable 32-bit seed.
+- Persisted selected seed to URL + localStorage so reloading preserves/re-shares worlds.
+- Updated debug and `window.render_game_to_text()` to expose both `world_seed_text` and numeric `world_seed`.
+
+## Test Notes (Update 10)
+- `node --check game.js` passes.
+- Ran Playwright skill client command:
+  - `node "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url http://127.0.0.1:8000 --actions-file "$HOME/.codex/skills/develop-web-game/references/action_payloads.json" --iterations 1 --pause-ms 200`
+- Playwright run remains blocked in this environment with `ERR_MODULE_NOT_FOUND: Cannot find package 'playwright'`.
+
+## TODO Next Agent
+- Install/enable `playwright`, run the skill client against a running local server, and confirm screenshots/text state show stable terrain for repeated runs of the same `seed` and changed terrain for different seeds.

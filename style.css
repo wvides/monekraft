@@ -241,13 +241,66 @@ body {
   display: grid;
   place-content: center;
   text-align: center;
-  gap: 10px;
   background: rgba(0, 0, 0, 0.5);
+  pointer-events: auto;
+}
+
+.overlayCard {
+  width: min(520px, calc(100vw - 28px));
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.38);
 }
 
 #overlay h1,
-#overlay p {
+#overlay p,
+#seedControls label {
   margin: 0;
+}
+
+#seedControls {
+  display: grid;
+  gap: 8px;
+  text-align: left;
+}
+
+#seedControls label {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.seedRow {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) auto auto;
+  gap: 8px;
+}
+
+#seedInput,
+#applySeedBtn,
+#randomSeedBtn {
+  font: 700 13px/1 "Trebuchet MS", "Segoe UI", sans-serif;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: #fff;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+#seedInput {
+  padding: 9px 10px;
+  min-width: 0;
+}
+
+#applySeedBtn,
+#randomSeedBtn {
+  padding: 0 11px;
+  cursor: pointer;
+}
+
+#seedControls p {
+  font-size: 12px;
+  opacity: 0.88;
 }
 
 body.playing #overlay {

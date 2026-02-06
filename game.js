@@ -3,6 +3,10 @@
   const ctx = canvas.getContext("2d", { alpha: false });
   const debugEl = document.getElementById("debug");
   const overlay = document.getElementById("overlay");
+  const seedControlsEl = document.getElementById("seedControls");
+  const seedInputEl = document.getElementById("seedInput");
+  const applySeedBtnEl = document.getElementById("applySeedBtn");
+  const randomSeedBtnEl = document.getElementById("randomSeedBtn");
   const toolbarEl = document.getElementById("toolbar");
   const inventoryPanelEl = document.getElementById("inventoryPanel");
   const inventoryGridEl = document.getElementById("inventoryGrid");
@@ -29,7 +33,77 @@
   const BLOCK_LEAVES = 6;
 
   const WATER_LEVEL = 11;
-  const WORLD_SEED = Math.floor(Math.random() * 2147483647);
+  const WORLD_SEED_STORAGE_KEY = "monekraft.seed";
+
+  function randomSeedText() {
+    return String(Math.floor(Math.random() * 2147483647) + 1);
+  }
+
+  function hashSeedText(seedText) {
+    let hash = 2166136261;
+    for (let i = 0; i < seedText.length; i++) {
+      hash ^= seedText.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    return hash >>> 0;
+  }
+
+  function seedTextToNumber(seedText) {
+    const trimmed = seedText.trim();
+    if (/^-?\d+$/.test(trimmed)) {
+      const parsed = Number(trimmed);
+      if (Number.isSafeInteger(parsed)) {
+        const normalized = parsed >>> 0;
+        return normalized === 0 ? 1 : normalized;
+      }
+    }
+    const hashed = hashSeedText(trimmed);
+    return hashed === 0 ? 1 : hashed;
+  }
+
+  function readStoredSeedText() {
+    try {
+      const stored = window.localStorage.getItem(WORLD_SEED_STORAGE_KEY);
+      if (!stored) return null;
+      const trimmed = stored.trim();
+      return trimmed.length ? trimmed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function writeStoredSeedText(seedText) {
+    try {
+      window.localStorage.setItem(WORLD_SEED_STORAGE_KEY, seedText);
+    } catch {
+      // Ignore storage failures (private mode, quota, disabled storage).
+    }
+  }
+
+  function readSeedFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const value = params.get("seed");
+    if (typeof value !== "string") return null;
+    const trimmed = value.trim();
+    return trimmed.length ? trimmed : null;
+  }
+
+  function normalizeSeedText(seedText) {
+    const trimmed = typeof seedText === "string" ? seedText.trim() : "";
+    if (trimmed.length) return trimmed.slice(0, 64);
+    return randomSeedText();
+  }
+
+  function buildSeedUrl(seedText) {
+    const nextUrl = new URL(window.location.href);
+    nextUrl.searchParams.set("seed", seedText);
+    return nextUrl.toString();
+  }
+
+  const WORLD_SEED_TEXT = normalizeSeedText(readSeedFromUrl() || readStoredSeedText() || randomSeedText());
+  const WORLD_SEED = seedTextToNumber(WORLD_SEED_TEXT);
+  writeStoredSeedText(WORLD_SEED_TEXT);
+  window.history.replaceState(null, "", buildSeedUrl(WORLD_SEED_TEXT));
 
   const world = new Uint8Array(WORLD_X * WORLD_Y * WORLD_Z);
   const columnTopSolidY = new Int16Array(COLUMN_COUNT);
@@ -2175,7 +2249,7 @@
     const target = traceRayTarget(8, true);
     const targetText = target ? `${target.x},${target.y},${target.z}` : "none";
     debugEl.textContent = [
-      `seed ${WORLD_SEED}`,
+      `seed ${WORLD_SEED_TEXT} (#${WORLD_SEED})`,
       `x ${player.x.toFixed(2)}`,
       `y ${player.y.toFixed(2)}`,
       `z ${player.z.toFixed(2)}`,
@@ -2212,6 +2286,7 @@
     const target = traceRayTarget(8, true);
     return JSON.stringify({
       world_seed: WORLD_SEED,
+      world_seed_text: WORLD_SEED_TEXT,
       coordinate_system: "origin at world minimum corner; +x east, +y up, +z south",
       mode: locked ? "playing" : inventoryOpen ? "inventory" : "menu",
       player: {
@@ -2258,6 +2333,55 @@
     render();
     updateDebugText();
   };
+
+  function applySeedFromInput() {
+    const requestedSeed = seedInputEl ? seedInputEl.value : "";
+    const nextSeed = normalizeSeedText(requestedSeed);
+    writeStoredSeedText(nextSeed);
+    if (seedInputEl) {
+      seedInputEl.value = nextSeed;
+    }
+    const nextUrl = buildSeedUrl(nextSeed);
+    if (nextSeed === WORLD_SEED_TEXT) {
+      window.location.reload();
+      return;
+    }
+    window.location.assign(nextUrl);
+  }
+
+  if (seedInputEl) {
+    seedInputEl.value = WORLD_SEED_TEXT;
+    seedInputEl.addEventListener("keydown", (e) => {
+      if (e.code !== "Enter") return;
+      e.preventDefault();
+      applySeedFromInput();
+    });
+  }
+
+  if (seedControlsEl) {
+    ["click", "mousedown", "mouseup", "dblclick"].forEach((eventName) => {
+      seedControlsEl.addEventListener(eventName, (e) => {
+        e.stopPropagation();
+      });
+    });
+  }
+
+  if (applySeedBtnEl) {
+    applySeedBtnEl.addEventListener("click", (e) => {
+      e.preventDefault();
+      applySeedFromInput();
+    });
+  }
+
+  if (randomSeedBtnEl) {
+    randomSeedBtnEl.addEventListener("click", (e) => {
+      e.preventDefault();
+      if (seedInputEl) {
+        seedInputEl.value = randomSeedText();
+      }
+      applySeedFromInput();
+    });
+  }
 
   let prev = performance.now();
   function frame(t) {
