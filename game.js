@@ -892,6 +892,13 @@
   let pendingMineOnLock = false;
   const miningInterval = 0.14;
   let fpsValue = 60;
+  let debugVisible = false;
+
+  function setDebugVisible(visible) {
+    debugVisible = !!visible;
+    document.body.classList.toggle("debug-on", debugVisible);
+    debugEl.setAttribute("aria-hidden", debugVisible ? "false" : "true");
+  }
 
   const animalTypes = {
     pig: {
@@ -2471,6 +2478,11 @@
       }
       return;
     }
+    if (e.code === "KeyP") {
+      e.preventDefault();
+      setDebugVisible(!debugVisible);
+      return;
+    }
     if (e.code === "KeyK") {
       e.preventDefault();
       saveGameSnapshot("manual");
@@ -2579,6 +2591,7 @@
   });
 
   function updateDebugText() {
+    if (!debugVisible) return;
     const target = traceRayTarget(8, true);
     const targetText = target ? `${target.x},${target.y},${target.z}` : "none";
     const saveAge = lastSaveAtUnix ? `${Math.max(0, Math.floor((Date.now() - lastSaveAtUnix) / 1000))}s` : "never";
@@ -2747,6 +2760,7 @@
   spawnAnimals();
   refreshSelectedItemState();
   renderToolbar();
+  setDebugVisible(false);
 
   if (!loadGameSnapshot("startup")) {
     saveGameSnapshot("autosave");

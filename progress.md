@@ -159,3 +159,32 @@ Original prompt: I want the game to also have a calming music in the brackground
 
 ## Test Notes (Update 13)
 - `node --check game.js` passes.
+
+## Update 14
+- Redesigned the controls HUD into a structured, easier-to-scan card with grouped rows (`Move`, `Build`, `UI`, `System`) and keycap-style labels.
+- Added `P` to controls and implemented debug panel toggling with `KeyP`.
+- Debug panel now starts hidden by default and only appears when debug mode is toggled on.
+- Added responsive adjustments for the controls card on smaller screens.
+
+## Test Notes (Update 14)
+- `node --check game.js` passes.
+- Ran Playwright skill client command:
+  - `node "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url http://127.0.0.1:8000 --actions-file "$HOME/.codex/skills/develop-web-game/references/action_payloads.json" --iterations 1 --pause-ms 200`
+- Playwright run is currently blocked by missing browser binary (`chrome-headless-shell`); suggested setup command is `npx playwright install`.
+
+## Update 15
+- Adjusted controls card to feel more vertical:
+  - Reduced controls panel width.
+  - Stacked each control section label above its key/value chips.
+  - Slightly tightened vertical spacing for clearer column flow.
+
+## Update 16
+- Reduced controls HUD footprint to remove wasted right-side space:
+  - Narrowed panel width.
+  - Reduced panel padding and row gaps.
+  - Reduced key chip and label sizing for denser layout.
+  - Tightened mobile spacing further.
+
+## Update 17
+- Made the controls HUD outer box shrink to content width (`width: max-content`) with a tighter `max-width` cap.
+- This removes persistent empty right-side space and forces a more vertical card when needed.

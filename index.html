@@ -10,11 +10,54 @@
     <canvas id="gameCanvas" width="240" height="135" aria-label="Voxel sandbox game canvas"></canvas>
 
     <div id="hud">
-      <div id="topLeft">
-        <div>Monekraft</div>
-        <div>WASD move, mouse look, Space jump</div>
-        <div>Left click break, Right click place</div>
-        <div>Use toolbar or 1-8 (top row or numpad, 7 = pickaxe), E inventory, F fullscreen, M music, K save, L load</div>
+      <div id="topLeft" aria-label="Game controls">
+        <p class="hudTitle">Monekraft Controls</p>
+        <div class="controlRow">
+          <span class="controlTag">Move</span>
+          <div class="controlKeys">
+            <kbd>WASD</kbd>
+            <span class="controlText">walk</span>
+            <kbd>Mouse</kbd>
+            <span class="controlText">look</span>
+            <kbd>Space</kbd>
+            <span class="controlText">jump</span>
+          </div>
+        </div>
+        <div class="controlRow">
+          <span class="controlTag">Build</span>
+          <div class="controlKeys">
+            <kbd>LMB</kbd>
+            <span class="controlText">break</span>
+            <kbd>RMB</kbd>
+            <span class="controlText">place</span>
+            <kbd>1-8</kbd>
+            <span class="controlText">hotbar</span>
+          </div>
+        </div>
+        <div class="controlRow">
+          <span class="controlTag">UI</span>
+          <div class="controlKeys">
+            <kbd>E</kbd>
+            <span class="controlText">inventory</span>
+            <kbd>F</kbd>
+            <span class="controlText">fullscreen</span>
+            <kbd>Esc</kbd>
+            <span class="controlText">release mouse</span>
+          </div>
+        </div>
+        <div class="controlRow">
+          <span class="controlTag">System</span>
+          <div class="controlKeys">
+            <kbd>M</kbd>
+            <span class="controlText">music</span>
+            <kbd>P</kbd>
+            <span class="controlText">debug</span>
+            <kbd>K</kbd>
+            <span class="controlText">save</span>
+            <kbd>L</kbd>
+            <span class="controlText">load</span>
+          </div>
+        </div>
       </div>
       <div id="debug"></div>
       <div id="crosshair">+</div>

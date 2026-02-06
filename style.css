@@ -39,12 +39,78 @@ body {
   position: absolute;
   top: 12px;
   left: 12px;
-  padding: 8px 10px;
-  background: var(--hud-bg);
-  border-radius: 8px;
-  font-size: 13px;
-  line-height: 1.35;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  width: max-content;
+  max-width: min(320px, calc(100vw - 20px));
+  display: grid;
+  gap: 6px;
+  padding: 9px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(176, 228, 255, 0.42);
+  background:
+    linear-gradient(145deg, rgba(9, 18, 33, 0.88), rgba(7, 12, 24, 0.74)),
+    radial-gradient(circle at top right, rgba(79, 188, 255, 0.24), rgba(79, 188, 255, 0));
+  box-shadow:
+    0 10px 26px rgba(0, 0, 0, 0.35),
+    0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+  backdrop-filter: blur(5px);
+}
+
+.hudTitle {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #b9ecff;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.6);
+}
+
+.controlRow {
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: start;
+  gap: 3px;
+}
+
+.controlTag {
+  margin-top: 0;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: rgba(198, 238, 255, 0.9);
+}
+
+.controlKeys {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px 5px;
+}
+
+.controlText {
+  margin-right: 3px;
+  font-size: 11px;
+  color: rgba(232, 244, 255, 0.92);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+#topLeft kbd {
+  min-width: 22px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.07));
+  color: #ffffff;
+  font: 700 10px/1 "Trebuchet MS", "Segoe UI", sans-serif;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.7);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.1) inset,
+    0 2px 4px rgba(0, 0, 0, 0.35);
 }
 
 #debug {
@@ -57,6 +123,11 @@ body {
   font-size: 12px;
   min-width: 170px;
   text-align: right;
+  display: none;
+}
+
+body.debug-on #debug {
+  display: block;
 }
 
 #crosshair {
@@ -310,4 +381,35 @@ body.playing #overlay {
 body.inventory-open #overlay,
 body.inventory-open #crosshair {
   display: none;
+}
+
+@media (max-width: 700px) {
+  #topLeft {
+    top: 6px;
+    left: 6px;
+    width: max-content;
+    max-width: calc(100vw - 12px);
+    padding: 8px;
+    gap: 5px;
+  }
+
+  .controlRow {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .controlTag {
+    font-size: 9px;
+  }
+
+  .controlText {
+    font-size: 10px;
+    margin-right: 2px;
+  }
+
+  #topLeft kbd {
+    height: 18px;
+    padding: 0 5px;
+    font-size: 9px;
+  }
 }
