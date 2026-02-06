@@ -188,3 +188,12 @@ Original prompt: I want the game to also have a calming music in the brackground
 ## Update 17
 - Made the controls HUD outer box shrink to content width (`width: max-content`) with a tighter `max-width` cap.
 - This removes persistent empty right-side space and forces a more vertical card when needed.
+
+## Update 18
+- Updated seed apply behavior so `Apply` (and Enter in seed input) now starts gameplay immediately when the seed is unchanged.
+- Removed same-seed forced reload from apply flow.
+- Added best-effort autostart flag across seed-change reloads so apply can attempt to start gameplay after navigation.
+- Reused a single `startGameplay()` helper for both overlay click and apply-triggered start.
+
+## Test Notes (Update 18)
+- `node --check game.js` passes.

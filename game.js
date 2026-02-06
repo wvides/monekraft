@@ -34,6 +34,7 @@
 
   const WATER_LEVEL = 11;
   const WORLD_SEED_STORAGE_KEY = "monekraft.seed";
+  const AUTO_START_ON_LOAD_KEY = "monekraft.autostart";
   const WORLD_SAVE_STORAGE_PREFIX = "monekraft.save.v1.";
   const WORLD_SAVE_VERSION = 1;
   const AUTOSAVE_INTERVAL_SECONDS = 12;
@@ -80,6 +81,28 @@
       window.localStorage.setItem(WORLD_SEED_STORAGE_KEY, seedText);
     } catch {
       // Ignore storage failures (private mode, quota, disabled storage).
+    }
+  }
+
+  function setAutoStartOnLoad(enabled) {
+    try {
+      if (enabled) {
+        window.sessionStorage.setItem(AUTO_START_ON_LOAD_KEY, "1");
+      } else {
+        window.sessionStorage.removeItem(AUTO_START_ON_LOAD_KEY);
+      }
+    } catch {
+      // Ignore storage failures.
+    }
+  }
+
+  function consumeAutoStartOnLoad() {
+    try {
+      const value = window.sessionStorage.getItem(AUTO_START_ON_LOAD_KEY);
+      window.sessionStorage.removeItem(AUTO_START_ON_LOAD_KEY);
+      return value === "1";
+    } catch {
+      return false;
     }
   }
 
@@ -2692,7 +2715,17 @@
     updateDebugText();
   };
 
-  function applySeedFromInput() {
+  function startGameplay() {
+    ensureBackgroundMusic();
+    if (!locked) {
+      const maybePromise = canvas.requestPointerLock();
+      if (maybePromise && typeof maybePromise.catch === "function") {
+        maybePromise.catch(() => {});
+      }
+    }
+  }
+
+  function applySeedFromInput(startAfterApply = false) {
     const requestedSeed = seedInputEl ? seedInputEl.value : "";
     const nextSeed = normalizeSeedText(requestedSeed);
     writeStoredSeedText(nextSeed);
@@ -2701,8 +2734,13 @@
     }
     const nextUrl = buildSeedUrl(nextSeed);
     if (nextSeed === WORLD_SEED_TEXT) {
-      window.location.reload();
+      if (startAfterApply) {
+        startGameplay();
+      }
       return;
+    }
+    if (startAfterApply) {
+      setAutoStartOnLoad(true);
     }
     window.location.assign(nextUrl);
   }
@@ -2712,7 +2750,7 @@
     seedInputEl.addEventListener("keydown", (e) => {
       if (e.code !== "Enter") return;
       e.preventDefault();
-      applySeedFromInput();
+      applySeedFromInput(true);
     });
   }
 
@@ -2727,7 +2765,7 @@
   if (applySeedBtnEl) {
     applySeedBtnEl.addEventListener("click", (e) => {
       e.preventDefault();
-      applySeedFromInput();
+      applySeedFromInput(true);
     });
   }
 
@@ -2777,9 +2815,12 @@
   });
 
   overlay.addEventListener("click", () => {
-    ensureBackgroundMusic();
-    canvas.requestPointerLock();
+    startGameplay();
   });
+
+  if (consumeAutoStartOnLoad()) {
+    startGameplay();
+  }
 
   requestAnimationFrame(frame);
 })();
