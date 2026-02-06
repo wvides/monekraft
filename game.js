@@ -1092,7 +1092,7 @@
     lfoGain.connect(filter.frequency);
 
     const windGain = audioContext.createGain();
-    windGain.gain.value = 0.055;
+    windGain.gain.value = 0.09;
 
     src.connect(filter);
     filter.connect(windGain);
@@ -1119,7 +1119,7 @@
         const midiNote = pickRandomNote(baseNote, scale);
         const freq = midiToFreq(midiNote);
         const duration = 4 + Math.random() * 6;
-        const volume = 0.04 + Math.random() * 0.025;
+        const volume = 0.08 + Math.random() * 0.04;
         createAmbientPad(freq, duration, volume);
       }, delay * 1000);
     }
@@ -1553,165 +1553,353 @@
     const drawList = [];
     for (const animal of animals) {
       const wx = animal.x - camX;
-      const wy = animal.y - camY + Math.sin(animal.stepPhase) * 0.06;
+      const wy = animal.y - camY + 0.5;
       const wz = animal.z - camZ;
 
       const yawX = wx * cy - wz * sy;
       const yawZ = wz * cy + wx * sy;
       const viewY = wy * cp - yawZ * sp;
       const viewZ = wy * sp + yawZ * cp;
-      if (viewZ <= 0.2) continue;
+      if (viewZ <= 0.3) continue;
 
       const dist = Math.hypot(wx, wy, wz);
-      const rayHit = castRay(camX, camY, camZ, wx / dist, wy / dist, wz / dist, dist - 0.2);
-      if (rayHit && isSolidBlock(rayHit.block)) continue;
+      if (dist > 24) continue;
+
+      const rayHit = castRay(camX, camY, camZ, wx / dist, wy / dist, wz / dist, dist - 0.5);
+      if (rayHit && isSolidBlock(rayHit.block) && rayHit.dist < dist - 1.0) continue;
 
       const sx = RENDER_W * 0.5 + (yawX / (viewZ * tanHalfFov * aspect)) * (RENDER_W * 0.5);
       const syScreen = RENDER_H * 0.5 - (viewY / (viewZ * tanHalfFov)) * (RENDER_H * 0.5);
-      if (sx < -45 || sx > RENDER_W + 45 || syScreen < -45 || syScreen > RENDER_H + 45) continue;
+      if (sx < -30 || sx > RENDER_W + 30 || syScreen < -30 || syScreen > RENDER_H + 30) continue;
 
-      drawList.push({ animal, sx, sy: syScreen, depth: viewZ });
+      const occlusionAlpha = Math.min(1, Math.max(0.3, 1 - (rayHit ? (dist - rayHit.dist) / 3 : 0)));
+      drawList.push({ animal, sx, sy: syScreen, depth: viewZ, alpha: occlusionAlpha });
     }
 
     drawList.sort((a, b) => b.depth - a.depth);
     for (const entry of drawList) {
+      ctx.globalAlpha = entry.alpha;
       drawAnimal(entry.animal, entry.sx, entry.sy, entry.depth);
+      ctx.globalAlpha = 1;
     }
   }
 
   function drawAnimal(animal, sx, sy, depth) {
     const palette = animalTypes[animal.type];
     const size = Math.max(7, Math.min(34, (26 / depth) * palette.scale));
-    const bodyW = size * (animal.type === "chicken" ? 1.05 : 1.28);
-    const bodyH = size * (animal.type === "chicken" ? 1.08 : 0.84);
-    const headW = size * (animal.type === "chicken" ? 0.5 : 0.46);
-    const headH = size * (animal.type === "chicken" ? 0.48 : 0.42);
-    const bob = Math.sin(animal.stepPhase * 2.2) * (size * 0.05);
-    const step = Math.sin(animal.stepPhase * 6.2) * (size * 0.08);
+    const bob = Math.sin(animal.stepPhase * 2.2) * (size * 0.04);
+    const step = Math.sin(animal.stepPhase * 6.2) * (size * 0.06);
     const facing = Math.sin(animal.dir - player.yaw) >= 0 ? 1 : -1;
 
     ctx.save();
     ctx.translate(sx, sy + bob);
-    ctx.fillStyle = "rgba(0, 0, 0, 0.22)";
+
+    // Shadow
+    ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
     ctx.beginPath();
-    ctx.ellipse(0, bodyH * 0.54, bodyW * 0.45, Math.max(1.8, bodyH * 0.13), 0, 0, Math.PI * 2);
+    ctx.ellipse(0, size * 0.5, size * 0.6, size * 0.12, 0, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.scale(facing, 1);
-    ctx.strokeStyle = "rgba(0, 0, 0, 0.35)";
-    ctx.lineWidth = Math.max(0.6, size * 0.075);
-
-    const legW = size * 0.14;
-    const legH = size * 0.42;
-    const legXs = [-bodyW * 0.34, -bodyW * 0.12, bodyW * 0.08, bodyW * 0.3];
-    legXs.forEach((lx, i) => {
-      const shift = i % 2 === 0 ? step : -step;
-      ctx.fillStyle = palette.leg;
-      ctx.fillRect(lx, bodyH * 0.28 + shift, legW, legH);
-      ctx.strokeRect(lx, bodyH * 0.28 + shift, legW, legH);
-    });
 
     if (animal.type === "pig") {
-      ctx.fillStyle = palette.body;
-      ctx.fillRect(-bodyW * 0.5, -bodyH * 0.48, bodyW, bodyH);
-      ctx.strokeRect(-bodyW * 0.5, -bodyH * 0.48, bodyW, bodyH);
+      const bodyRx = size * 0.7;
+      const bodyRy = size * 0.4;
 
+      // Curly tail
+      ctx.strokeStyle = palette.accent;
+      ctx.lineWidth = size * 0.06;
+      ctx.beginPath();
+      ctx.moveTo(-bodyRx * 0.9, -size * 0.1);
+      for (let i = 0; i < 8; i++) {
+        const t = i / 7;
+        const cx = -bodyRx - size * 0.1 - t * size * 0.15;
+        const cy = -size * 0.1 + Math.sin(t * Math.PI * 2.5) * size * 0.08;
+        ctx.lineTo(cx, cy);
+      }
+      ctx.stroke();
+
+      // Back legs
+      const legW = size * 0.15;
+      const legH = size * 0.35;
+      ctx.fillStyle = palette.leg;
+      ctx.beginPath();
+      ctx.ellipse(-bodyRx * 0.5, size * 0.15 - step, legW * 0.5, legH * 0.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(-bodyRx * 0.2, size * 0.15 + step, legW * 0.5, legH * 0.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Front legs
+      ctx.beginPath();
+      ctx.ellipse(bodyRx * 0.3, size * 0.15 + step, legW * 0.5, legH * 0.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(bodyRx * 0.6, size * 0.15 - step, legW * 0.5, legH * 0.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Hooves
+      ctx.fillStyle = "#4a3a3a";
+      const hoofY = size * 0.32;
+      ctx.fillRect(-bodyRx * 0.5 - legW * 0.3, hoofY - step, legW * 0.6, size * 0.08);
+      ctx.fillRect(-bodyRx * 0.2 - legW * 0.3, hoofY + step, legW * 0.6, size * 0.08);
+      ctx.fillRect(bodyRx * 0.3 - legW * 0.3, hoofY + step, legW * 0.6, size * 0.08);
+      ctx.fillRect(bodyRx * 0.6 - legW * 0.3, hoofY - step, legW * 0.6, size * 0.08);
+
+      // Body
+      ctx.fillStyle = palette.body;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, bodyRx, bodyRy, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Body shading
+      ctx.fillStyle = "rgba(0,0,0,0.1)";
+      ctx.beginPath();
+      ctx.ellipse(0, bodyRy * 0.2, bodyRx * 0.9, bodyRy * 0.6, 0, 0, Math.PI);
+      ctx.fill();
+
+      // Body highlight
+      ctx.fillStyle = "rgba(255,255,255,0.15)";
+      ctx.beginPath();
+      ctx.ellipse(0, -bodyRy * 0.3, bodyRx * 0.6, bodyRy * 0.3, 0, Math.PI, Math.PI * 2);
+      ctx.fill();
+
+      // Head
+      const headX = bodyRx * 0.85;
+      const headRx = size * 0.32;
+      const headRy = size * 0.28;
+      ctx.fillStyle = palette.body;
+      ctx.beginPath();
+      ctx.ellipse(headX, -size * 0.08, headRx, headRy, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Ears
       ctx.fillStyle = palette.accent;
-      ctx.fillRect(-bodyW * 0.2, -bodyH * 0.3, bodyW * 0.42, bodyH * 0.22);
+      ctx.beginPath();
+      ctx.ellipse(headX - headRx * 0.5, -size * 0.35, size * 0.1, size * 0.14, -0.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(headX + headRx * 0.3, -size * 0.33, size * 0.1, size * 0.14, 0.4, 0, Math.PI * 2);
+      ctx.fill();
 
-      ctx.fillStyle = palette.body;
-      ctx.fillRect(bodyW * 0.3, -headH * 0.52, headW, headH);
-      ctx.strokeRect(bodyW * 0.3, -headH * 0.52, headW, headH);
-
+      // Snout
       ctx.fillStyle = palette.snout;
-      ctx.fillRect(bodyW * 0.56, -headH * 0.3, headW * 0.56, headH * 0.52);
-      ctx.strokeRect(bodyW * 0.56, -headH * 0.3, headW * 0.56, headH * 0.52);
+      ctx.beginPath();
+      ctx.ellipse(headX + headRx * 0.7, -size * 0.02, size * 0.18, size * 0.14, 0, 0, Math.PI * 2);
+      ctx.fill();
 
+      // Nostrils
       ctx.fillStyle = palette.eye;
-      ctx.fillRect(bodyW * 0.62, -headH * 0.16, size * 0.09, size * 0.09);
-      ctx.fillRect(bodyW * 0.74, -headH * 0.16, size * 0.09, size * 0.09);
-      ctx.fillRect(bodyW * 0.67, -headH * 0.02, size * 0.05, size * 0.05);
-      ctx.fillRect(bodyW * 0.79, -headH * 0.02, size * 0.05, size * 0.05);
+      ctx.beginPath();
+      ctx.ellipse(headX + headRx * 0.65, -size * 0.04, size * 0.03, size * 0.04, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(headX + headRx * 0.85, -size * 0.04, size * 0.03, size * 0.04, 0, 0, Math.PI * 2);
+      ctx.fill();
 
+      // Eyes
+      ctx.fillStyle = "#1a1a1a";
       ctx.beginPath();
-      ctx.moveTo(bodyW * 0.38, -headH * 0.52);
-      ctx.lineTo(bodyW * 0.45, -headH * 0.92);
-      ctx.lineTo(bodyW * 0.52, -headH * 0.52);
-      ctx.closePath();
-      ctx.fillStyle = palette.accent;
+      ctx.ellipse(headX + headRx * 0.2, -size * 0.15, size * 0.045, size * 0.055, 0, 0, Math.PI * 2);
       ctx.fill();
+      // Eye highlight
+      ctx.fillStyle = "#fff";
       ctx.beginPath();
-      ctx.moveTo(bodyW * 0.56, -headH * 0.52);
-      ctx.lineTo(bodyW * 0.63, -headH * 0.92);
-      ctx.lineTo(bodyW * 0.7, -headH * 0.52);
-      ctx.closePath();
+      ctx.arc(headX + headRx * 0.15, -size * 0.17, size * 0.02, 0, Math.PI * 2);
       ctx.fill();
+
     } else if (animal.type === "sheep") {
+      const bodyRx = size * 0.75;
+      const bodyRy = size * 0.5;
+
+      // Back legs (dark)
+      ctx.fillStyle = palette.leg;
+      const legW = size * 0.12;
+      ctx.fillRect(-bodyRx * 0.5 - legW * 0.5, size * 0.05 - step, legW, size * 0.4);
+      ctx.fillRect(-bodyRx * 0.15 - legW * 0.5, size * 0.05 + step, legW, size * 0.4);
+      ctx.fillRect(bodyRx * 0.2 - legW * 0.5, size * 0.05 + step, legW, size * 0.4);
+      ctx.fillRect(bodyRx * 0.55 - legW * 0.5, size * 0.05 - step, legW, size * 0.4);
+
+      // Fluffy wool body - multiple overlapping ellipses
       ctx.fillStyle = palette.body;
-      const clumps = [
-        [-0.48, -0.48],
-        [-0.24, -0.58],
-        [0, -0.62],
-        [0.26, -0.56],
-        [0.48, -0.46],
-        [-0.42, -0.2],
-        [-0.14, -0.22],
-        [0.18, -0.18],
-        [0.42, -0.24],
+      const woolPositions = [
+        [0, 0, 1, 1],
+        [-0.4, -0.15, 0.7, 0.75],
+        [0.4, -0.15, 0.7, 0.75],
+        [-0.2, -0.35, 0.6, 0.5],
+        [0.2, -0.35, 0.6, 0.5],
+        [0, -0.25, 0.8, 0.7],
+        [-0.5, 0.1, 0.55, 0.6],
+        [0.5, 0.1, 0.55, 0.6],
       ];
-      clumps.forEach(([ox, oy]) => {
-        const cw = size * 0.52;
-        const ch = size * 0.4;
-        ctx.fillRect(ox * bodyW, oy * bodyH, cw, ch);
-        ctx.strokeRect(ox * bodyW, oy * bodyH, cw, ch);
+      woolPositions.forEach(([ox, oy, sx, sy]) => {
+        ctx.beginPath();
+        ctx.ellipse(ox * bodyRx, oy * bodyRy, bodyRx * sx * 0.55, bodyRy * sy * 0.55, 0, 0, Math.PI * 2);
+        ctx.fill();
       });
 
-      ctx.fillStyle = palette.snout;
-      ctx.fillRect(bodyW * 0.34, -headH * 0.5, headW * 0.85, headH * 1.02);
-      ctx.strokeRect(bodyW * 0.34, -headH * 0.5, headW * 0.85, headH * 1.02);
+      // Wool shading
+      ctx.fillStyle = "rgba(0,0,0,0.08)";
+      ctx.beginPath();
+      ctx.ellipse(0, bodyRy * 0.15, bodyRx * 0.8, bodyRy * 0.5, 0, 0, Math.PI);
+      ctx.fill();
 
-      ctx.fillStyle = palette.accent;
-      ctx.fillRect(bodyW * 0.42, -headH * 0.37, headW * 0.66, headH * 0.52);
-      ctx.fillStyle = palette.eye;
-      ctx.fillRect(bodyW * 0.53, -headH * 0.14, size * 0.09, size * 0.09);
-
-      ctx.fillStyle = palette.snout;
-      ctx.fillRect(bodyW * 0.42, -headH * 0.77, size * 0.12, size * 0.18);
-      ctx.fillRect(bodyW * 0.86, -headH * 0.77, size * 0.12, size * 0.18);
-      ctx.strokeRect(bodyW * 0.42, -headH * 0.77, size * 0.12, size * 0.18);
-      ctx.strokeRect(bodyW * 0.86, -headH * 0.77, size * 0.12, size * 0.18);
-    } else {
-      ctx.fillStyle = palette.body;
-      ctx.fillRect(-bodyW * 0.44, -bodyH * 0.5, bodyW * 0.88, bodyH * 0.96);
-      ctx.strokeRect(-bodyW * 0.44, -bodyH * 0.5, bodyW * 0.88, bodyH * 0.96);
-
-      ctx.fillStyle = "#f4f4f4";
-      ctx.fillRect(-bodyW * 0.3, -bodyH * 0.31, bodyW * 0.52, bodyH * 0.47);
-
-      ctx.fillStyle = palette.body;
-      ctx.fillRect(bodyW * 0.24, -headH * 0.58, headW * 0.86, headH * 0.94);
-      ctx.strokeRect(bodyW * 0.24, -headH * 0.58, headW * 0.86, headH * 0.94);
-
+      // Head (darker face)
+      const headX = bodyRx * 0.75;
       ctx.fillStyle = palette.snout;
       ctx.beginPath();
-      ctx.moveTo(bodyW * 0.92, -headH * 0.23);
-      ctx.lineTo(bodyW * 1.24, -headH * 0.02);
-      ctx.lineTo(bodyW * 0.92, headH * 0.2);
+      ctx.ellipse(headX, -size * 0.05, size * 0.22, size * 0.25, 0.15, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Wool tuft on head
+      ctx.fillStyle = palette.body;
+      ctx.beginPath();
+      ctx.ellipse(headX - size * 0.08, -size * 0.28, size * 0.15, size * 0.12, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(headX + size * 0.05, -size * 0.3, size * 0.12, size * 0.1, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Ears
+      ctx.fillStyle = palette.snout;
+      ctx.beginPath();
+      ctx.ellipse(headX - size * 0.18, -size * 0.12, size * 0.12, size * 0.06, -0.8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(headX + size * 0.22, -size * 0.15, size * 0.12, size * 0.06, 0.6, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Inner ear
+      ctx.fillStyle = palette.accent;
+      ctx.beginPath();
+      ctx.ellipse(headX - size * 0.17, -size * 0.12, size * 0.07, size * 0.035, -0.8, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Eyes
+      ctx.fillStyle = "#1a1a1a";
+      ctx.beginPath();
+      ctx.ellipse(headX + size * 0.08, -size * 0.1, size * 0.04, size * 0.05, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Eye highlight
+      ctx.fillStyle = "#fff";
+      ctx.beginPath();
+      ctx.arc(headX + size * 0.06, -size * 0.12, size * 0.015, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Nose
+      ctx.fillStyle = "#2a2a2a";
+      ctx.beginPath();
+      ctx.ellipse(headX + size * 0.2, size * 0.02, size * 0.04, size * 0.03, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+    } else {
+      // Chicken
+      const bodyRx = size * 0.4;
+      const bodyRy = size * 0.45;
+
+      // Tail feathers
+      ctx.fillStyle = "#3d3d3d";
+      ctx.beginPath();
+      ctx.moveTo(-bodyRx * 0.6, -size * 0.1);
+      ctx.quadraticCurveTo(-bodyRx * 1.4, -size * 0.6, -bodyRx * 1.1, -size * 0.8);
+      ctx.quadraticCurveTo(-bodyRx * 0.9, -size * 0.5, -bodyRx * 0.5, -size * 0.25);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(-bodyRx * 0.5, -size * 0.05);
+      ctx.quadraticCurveTo(-bodyRx * 1.5, -size * 0.3, -bodyRx * 1.2, -size * 0.55);
+      ctx.quadraticCurveTo(-bodyRx * 0.8, -size * 0.3, -bodyRx * 0.4, -size * 0.15);
+      ctx.fill();
+
+      // Legs
+      ctx.strokeStyle = palette.snout;
+      ctx.lineWidth = size * 0.05;
+      ctx.beginPath();
+      ctx.moveTo(-size * 0.08, size * 0.25);
+      ctx.lineTo(-size * 0.1, size * 0.45 - step);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(size * 0.08, size * 0.25);
+      ctx.lineTo(size * 0.1, size * 0.45 + step);
+      ctx.stroke();
+
+      // Feet
+      ctx.lineWidth = size * 0.03;
+      ctx.beginPath();
+      ctx.moveTo(-size * 0.18, size * 0.48 - step);
+      ctx.lineTo(-size * 0.1, size * 0.45 - step);
+      ctx.lineTo(-size * 0.02, size * 0.48 - step);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(size * 0.02, size * 0.48 + step);
+      ctx.lineTo(size * 0.1, size * 0.45 + step);
+      ctx.lineTo(size * 0.18, size * 0.48 + step);
+      ctx.stroke();
+
+      // Body
+      ctx.fillStyle = palette.body;
+      ctx.beginPath();
+      ctx.ellipse(0, size * 0.05, bodyRx, bodyRy, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Body shading
+      ctx.fillStyle = "rgba(0,0,0,0.1)";
+      ctx.beginPath();
+      ctx.ellipse(0, size * 0.2, bodyRx * 0.85, bodyRy * 0.5, 0, 0, Math.PI);
+      ctx.fill();
+
+      // Wing
+      ctx.fillStyle = "#e8e8e8";
+      ctx.beginPath();
+      ctx.ellipse(size * 0.05, size * 0.05, bodyRx * 0.5, bodyRy * 0.6, 0.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(0,0,0,0.08)";
+      ctx.beginPath();
+      ctx.ellipse(size * 0.05, size * 0.12, bodyRx * 0.45, bodyRy * 0.4, 0.2, 0, Math.PI);
+      ctx.fill();
+
+      // Head
+      const headX = bodyRx * 0.6;
+      const headY = -size * 0.35;
+      ctx.fillStyle = palette.body;
+      ctx.beginPath();
+      ctx.ellipse(headX, headY, size * 0.2, size * 0.18, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Comb (red)
+      ctx.fillStyle = palette.accent;
+      ctx.beginPath();
+      ctx.moveTo(headX - size * 0.05, headY - size * 0.15);
+      ctx.quadraticCurveTo(headX - size * 0.08, headY - size * 0.32, headX, headY - size * 0.28);
+      ctx.quadraticCurveTo(headX + size * 0.02, headY - size * 0.35, headX + size * 0.08, headY - size * 0.26);
+      ctx.quadraticCurveTo(headX + size * 0.12, headY - size * 0.32, headX + size * 0.15, headY - size * 0.22);
+      ctx.quadraticCurveTo(headX + size * 0.12, headY - size * 0.12, headX + size * 0.05, headY - size * 0.12);
       ctx.closePath();
       ctx.fill();
 
-      ctx.fillStyle = palette.accent;
-      ctx.fillRect(bodyW * 0.52, -headH * 0.92, size * 0.11, size * 0.2);
-      ctx.fillRect(bodyW * 0.64, -headH * 1.02, size * 0.11, size * 0.26);
-      ctx.fillRect(bodyW * 0.76, -headH * 0.92, size * 0.11, size * 0.2);
+      // Wattle (red thing under beak)
+      ctx.beginPath();
+      ctx.ellipse(headX + size * 0.18, headY + size * 0.12, size * 0.04, size * 0.08, 0, 0, Math.PI * 2);
+      ctx.fill();
 
-      ctx.fillStyle = palette.eye;
-      ctx.fillRect(bodyW * 0.54, -headH * 0.17, size * 0.08, size * 0.08);
+      // Beak
+      ctx.fillStyle = palette.snout;
+      ctx.beginPath();
+      ctx.moveTo(headX + size * 0.18, headY - size * 0.02);
+      ctx.lineTo(headX + size * 0.35, headY + size * 0.02);
+      ctx.lineTo(headX + size * 0.18, headY + size * 0.06);
+      ctx.closePath();
+      ctx.fill();
 
-      ctx.fillStyle = palette.leg;
-      const clawY = bodyH * 0.7;
-      ctx.fillRect(-bodyW * 0.18, clawY, size * 0.1, size * 0.19);
-      ctx.fillRect(bodyW * 0.05, clawY, size * 0.1, size * 0.19);
+      // Eye
+      ctx.fillStyle = "#1a1a1a";
+      ctx.beginPath();
+      ctx.arc(headX + size * 0.08, headY - size * 0.02, size * 0.04, 0, Math.PI * 2);
+      ctx.fill();
+      // Eye highlight
+      ctx.fillStyle = "#fff";
+      ctx.beginPath();
+      ctx.arc(headX + size * 0.06, headY - size * 0.04, size * 0.015, 0, Math.PI * 2);
+      ctx.fill();
     }
 
     ctx.restore();
