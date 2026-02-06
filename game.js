@@ -982,10 +982,190 @@
     playTone({ wave: "sine", from: 120, to: 100, duration: 0.04, volume: 0.024, filterHz: 700 });
   }
 
-  function startBackgroundMusic() {}
+  // Procedural ambient music system
+  let ambientMusicActive = false;
+  let ambientNodes = [];
+  let ambientIntervalId = null;
+
+  const ambientScales = [
+    [0, 2, 4, 7, 9],      // Major pentatonic
+    [0, 3, 5, 7, 10],     // Minor pentatonic
+    [0, 2, 4, 5, 7, 9],   // Major scale subset
+    [0, 2, 3, 5, 7, 8, 10] // Natural minor
+  ];
+
+  function midiToFreq(midi) {
+    return 440 * Math.pow(2, (midi - 69) / 12);
+  }
+
+  function pickRandomNote(baseNote, scale) {
+    const octaveShift = Math.floor(Math.random() * 2) * 12;
+    const scaleNote = scale[Math.floor(Math.random() * scale.length)];
+    return baseNote + scaleNote + octaveShift;
+  }
+
+  function createAmbientPad(freq, duration, volume) {
+    if (!audioContext || !musicBusGain) return null;
+    const now = audioContext.currentTime;
+
+    const osc1 = audioContext.createOscillator();
+    const osc2 = audioContext.createOscillator();
+    const lfo = audioContext.createOscillator();
+    const lfoGain = audioContext.createGain();
+    const padGain = audioContext.createGain();
+    const filter = audioContext.createBiquadFilter();
+
+    osc1.type = "sine";
+    osc1.frequency.value = freq;
+    osc2.type = "sine";
+    osc2.frequency.value = freq * 1.002;
+
+    lfo.type = "sine";
+    lfo.frequency.value = 0.15 + Math.random() * 0.1;
+    lfoGain.gain.value = freq * 0.008;
+
+    lfo.connect(lfoGain);
+    lfoGain.connect(osc1.frequency);
+    lfoGain.connect(osc2.frequency);
+
+    filter.type = "lowpass";
+    filter.frequency.value = 800 + Math.random() * 400;
+    filter.Q.value = 0.5;
+
+    const attack = duration * 0.3;
+    const release = duration * 0.4;
+
+    padGain.gain.setValueAtTime(0.0001, now);
+    padGain.gain.linearRampToValueAtTime(volume, now + attack);
+    padGain.gain.setValueAtTime(volume, now + duration - release);
+    padGain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+    osc1.connect(filter);
+    osc2.connect(filter);
+    filter.connect(padGain);
+    padGain.connect(musicBusGain);
+
+    osc1.start(now);
+    osc2.start(now);
+    lfo.start(now);
+    osc1.stop(now + duration + 0.1);
+    osc2.stop(now + duration + 0.1);
+    lfo.stop(now + duration + 0.1);
+
+    const cleanup = () => cleanupNodeChain([osc1, osc2, lfo, lfoGain, padGain, filter]);
+    osc1.addEventListener("ended", cleanup, { once: true });
+
+    return { osc1, osc2, lfo, lfoGain, padGain, filter };
+  }
+
+  function createWindAmbience() {
+    if (!audioContext || !musicBusGain) return null;
+
+    const bufferSize = audioContext.sampleRate * 2;
+    const buffer = audioContext.createBuffer(2, bufferSize, audioContext.sampleRate);
+
+    for (let channel = 0; channel < 2; channel++) {
+      const data = buffer.getChannelData(channel);
+      let lastOut = 0;
+      for (let i = 0; i < bufferSize; i++) {
+        const white = Math.random() * 2 - 1;
+        lastOut = 0.99 * lastOut + 0.01 * white;
+        data[i] = lastOut * 0.5;
+      }
+    }
+
+    const src = audioContext.createBufferSource();
+    src.buffer = buffer;
+    src.loop = true;
+
+    const filter = audioContext.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.frequency.value = 400;
+    filter.Q.value = 0.3;
+
+    const lfo = audioContext.createOscillator();
+    const lfoGain = audioContext.createGain();
+    lfo.type = "sine";
+    lfo.frequency.value = 0.08;
+    lfoGain.gain.value = 200;
+    lfo.connect(lfoGain);
+    lfoGain.connect(filter.frequency);
+
+    const windGain = audioContext.createGain();
+    windGain.gain.value = 0.025;
+
+    src.connect(filter);
+    filter.connect(windGain);
+    windGain.connect(musicBusGain);
+
+    src.start();
+    lfo.start();
+
+    ambientNodes.push({ src, filter, lfo, lfoGain, windGain });
+    return { src, filter, lfo, lfoGain, windGain };
+  }
+
+  function playAmbientMelody() {
+    if (!audioContext || !musicBusGain || musicMuted) return;
+
+    const scale = ambientScales[Math.floor(Math.random() * ambientScales.length)];
+    const baseNote = 48 + Math.floor(Math.random() * 3) * 12;
+
+    const noteCount = 1 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < noteCount; i++) {
+      const delay = i * (1.5 + Math.random() * 2);
+      setTimeout(() => {
+        if (!ambientMusicActive) return;
+        const midiNote = pickRandomNote(baseNote, scale);
+        const freq = midiToFreq(midiNote);
+        const duration = 4 + Math.random() * 6;
+        const volume = 0.015 + Math.random() * 0.01;
+        createAmbientPad(freq, duration, volume);
+      }, delay * 1000);
+    }
+  }
+
+  function startBackgroundMusic() {
+    if (ambientMusicActive) return;
+    ensureAudioGraph();
+    if (!audioContext || !musicBusGain) return;
+
+    ambientMusicActive = true;
+
+    createWindAmbience();
+
+    playAmbientMelody();
+    ambientIntervalId = setInterval(() => {
+      if (ambientMusicActive && !musicMuted) {
+        playAmbientMelody();
+      }
+    }, 6000 + Math.random() * 4000);
+  }
+
+  function stopBackgroundMusic() {
+    ambientMusicActive = false;
+    if (ambientIntervalId) {
+      clearInterval(ambientIntervalId);
+      ambientIntervalId = null;
+    }
+    for (const nodeSet of ambientNodes) {
+      for (const key in nodeSet) {
+        const node = nodeSet[key];
+        if (node && typeof node.stop === "function") {
+          try { node.stop(); } catch {}
+        }
+        if (node && typeof node.disconnect === "function") {
+          try { node.disconnect(); } catch {}
+        }
+      }
+    }
+    ambientNodes = [];
+  }
 
   function ensureBackgroundMusic() {
-    // Background music disabled by request.
+    if (!ambientMusicActive) {
+      startBackgroundMusic();
+    }
   }
 
   function castRay(ox, oy, oz, dx, dy, dz, maxDist) {
@@ -1658,6 +1838,15 @@
     if (e.code === "KeyE") {
       e.preventDefault();
       toggleInventory();
+      return;
+    }
+    if (e.code === "KeyM") {
+      e.preventDefault();
+      if (ambientMusicActive) {
+        stopBackgroundMusic();
+      } else {
+        startBackgroundMusic();
+      }
       return;
     }
     if (e.code === "Escape" && inventoryOpen) {
