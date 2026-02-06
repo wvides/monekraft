@@ -34,6 +34,9 @@
 
   const WATER_LEVEL = 11;
   const WORLD_SEED_STORAGE_KEY = "monekraft.seed";
+  const WORLD_SAVE_STORAGE_PREFIX = "monekraft.save.v1.";
+  const WORLD_SAVE_VERSION = 1;
+  const AUTOSAVE_INTERVAL_SECONDS = 12;
 
   function randomSeedText() {
     return String(Math.floor(Math.random() * 2147483647) + 1);
@@ -162,6 +165,16 @@
 
   function lerp(a, b, t) {
     return a + (b - a) * t;
+  }
+
+  function clampNumber(value, min, max, fallback) {
+    if (!Number.isFinite(value)) return fallback;
+    return Math.min(max, Math.max(min, value));
+  }
+
+  function clampInt(value, min, max, fallback) {
+    if (!Number.isFinite(value)) return fallback;
+    return Math.min(max, Math.max(min, Math.trunc(value)));
   }
 
   function terrainHeight(x, z) {
@@ -1265,6 +1278,245 @@
     }
   }
 
+  let saveStatusText = "save ready";
+  let lastSaveAtUnix = 0;
+  let autosaveTimer = 0;
+
+  function getSaveStorageKey() {
+    return `${WORLD_SAVE_STORAGE_PREFIX}${WORLD_SEED_TEXT}`;
+  }
+
+  function bytesToBase64(bytes) {
+    let binary = "";
+    const chunkSize = 0x2000;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      const end = Math.min(bytes.length, i + chunkSize);
+      let chunk = "";
+      for (let j = i; j < end; j++) {
+        chunk += String.fromCharCode(bytes[j]);
+      }
+      binary += chunk;
+    }
+    return btoa(binary);
+  }
+
+  function base64ToBytes(base64) {
+    if (typeof base64 !== "string" || !base64.length) return null;
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
+  }
+
+  function float32ToBase64(values) {
+    return bytesToBase64(new Uint8Array(values.buffer, values.byteOffset, values.byteLength));
+  }
+
+  function base64ToFloat32(base64, expectedLength) {
+    const bytes = base64ToBytes(base64);
+    if (!bytes || bytes.length !== expectedLength * 4) return null;
+    const floats = new Float32Array(bytes.buffer, bytes.byteOffset, expectedLength);
+    return new Float32Array(floats);
+  }
+
+  function saveGameSnapshot(reason) {
+    const inventoryCountsObject = {};
+    for (const [block, count] of inventoryCounts.entries()) {
+      inventoryCountsObject[String(block)] = Math.max(0, Math.floor(count));
+    }
+
+    const saveData = {
+      version: WORLD_SAVE_VERSION,
+      seedText: WORLD_SEED_TEXT,
+      savedAt: Date.now(),
+      player: {
+        x: player.x,
+        y: player.y,
+        z: player.z,
+        vx: player.vx,
+        vy: player.vy,
+        vz: player.vz,
+        yaw: player.yaw,
+        pitch: player.pitch,
+      },
+      weather: {
+        type: weather.type,
+        timer: weather.timer,
+        duration: weather.duration,
+        intensity: weather.intensity,
+        windPhase: weather.windPhase,
+      },
+      inventory: {
+        selectedItem,
+        targetSlot: inventoryTargetSlot,
+        counts: inventoryCountsObject,
+        toolbarBlocks: toolbarItems.map((item) => (item.type === "block" ? item.block : null)),
+      },
+      animals: animals.map((animal) => ({
+        type: animal.type,
+        x: animal.x,
+        y: animal.y,
+        z: animal.z,
+        dir: animal.dir,
+        turnTimer: animal.turnTimer,
+        pauseTimer: animal.pauseTimer,
+        stepPhase: animal.stepPhase,
+        vy: animal.vy || 0,
+      })),
+      worldData: bytesToBase64(world),
+      snowData: float32ToBase64(snowCoverByColumn),
+    };
+
+    try {
+      window.localStorage.setItem(getSaveStorageKey(), JSON.stringify(saveData));
+      lastSaveAtUnix = saveData.savedAt;
+      saveStatusText = reason === "autosave" ? "autosaved" : "saved";
+      return true;
+    } catch {
+      saveStatusText = "save failed";
+      return false;
+    }
+  }
+
+  function loadGameSnapshot(reason) {
+    let raw = null;
+    try {
+      raw = window.localStorage.getItem(getSaveStorageKey());
+    } catch {
+      saveStatusText = "storage unavailable";
+      return false;
+    }
+
+    if (!raw) {
+      saveStatusText = reason === "startup" ? "new world" : "no save found";
+      return false;
+    }
+
+    let saveData = null;
+    try {
+      saveData = JSON.parse(raw);
+    } catch {
+      saveStatusText = "save corrupted";
+      return false;
+    }
+
+    if (!saveData || saveData.version !== WORLD_SAVE_VERSION) {
+      saveStatusText = "save incompatible";
+      return false;
+    }
+    if (typeof saveData.seedText === "string" && saveData.seedText !== WORLD_SEED_TEXT) {
+      saveStatusText = "seed mismatch";
+      return false;
+    }
+
+    const worldBytes = base64ToBytes(saveData.worldData);
+    if (!worldBytes || worldBytes.length !== world.length) {
+      saveStatusText = "save invalid world";
+      return false;
+    }
+    world.set(worldBytes);
+    rebuildColumnTopSurfaceCache();
+
+    const snowValues = base64ToFloat32(saveData.snowData, COLUMN_COUNT);
+    if (snowValues) {
+      snowCoverByColumn.set(snowValues);
+    } else {
+      snowCoverByColumn.fill(0);
+    }
+
+    if (saveData.player && typeof saveData.player === "object") {
+      player.x = clampNumber(saveData.player.x, 1, WORLD_X - 2, WORLD_X / 2);
+      player.y = clampNumber(saveData.player.y, 1, WORLD_Y - 1, 18);
+      player.z = clampNumber(saveData.player.z, 1, WORLD_Z - 2, WORLD_Z / 2);
+      player.vx = clampNumber(saveData.player.vx, -30, 30, 0);
+      player.vy = clampNumber(saveData.player.vy, -30, 30, 0);
+      player.vz = clampNumber(saveData.player.vz, -30, 30, 0);
+      player.yaw = clampNumber(saveData.player.yaw, -1e6, 1e6, 0);
+      player.pitch = clampNumber(saveData.player.pitch, -Math.PI / 2 + 0.01, Math.PI / 2 - 0.01, -0.3);
+      player.onGround = false;
+    }
+
+    if (saveData.weather && typeof saveData.weather === "object") {
+      const nextType = [WEATHER_SUNNY, WEATHER_RAIN, WEATHER_SNOW].includes(saveData.weather.type)
+        ? saveData.weather.type
+        : WEATHER_SUNNY;
+      weather.type = nextType;
+      weather.duration = clampNumber(saveData.weather.duration, 2, 300, getWeatherDuration(nextType));
+      weather.timer = clampNumber(saveData.weather.timer, 0, weather.duration, weather.duration);
+      weather.intensity = clampNumber(
+        saveData.weather.intensity,
+        0,
+        1,
+        nextType === WEATHER_SUNNY ? 0 : 1,
+      );
+      weather.windPhase = clampNumber(saveData.weather.windPhase, -1e6, 1e6, randomRange(0, Math.PI * 2));
+      weather.particles.length = 0;
+      updateWeatherParticles(0);
+    }
+
+    for (const [block] of inventoryCounts) {
+      inventoryCounts.set(block, 0);
+    }
+
+    const inventory = saveData.inventory && typeof saveData.inventory === "object" ? saveData.inventory : null;
+    const counts = inventory && inventory.counts && typeof inventory.counts === "object" ? inventory.counts : {};
+    for (const [blockText, count] of Object.entries(counts)) {
+      const block = Number(blockText);
+      if (!inventoryCounts.has(block)) continue;
+      inventoryCounts.set(block, clampInt(count, 0, 9999, 0));
+    }
+
+    const toolbarBlocks = inventory && Array.isArray(inventory.toolbarBlocks) ? inventory.toolbarBlocks : null;
+    if (toolbarBlocks) {
+      toolbarItems.forEach((item, i) => {
+        if (item.type !== "block") return;
+        const block = Number(toolbarBlocks[i]);
+        if (!Object.prototype.hasOwnProperty.call(blockNames, block)) return;
+        item.block = block;
+        item.name = getBlockName(block);
+      });
+    }
+
+    selectedItem = clampInt(inventory ? inventory.selectedItem : selectedItem, 0, toolbarItems.length - 1, 6);
+    inventoryTargetSlot = clampInt(inventory ? inventory.targetSlot : inventoryTargetSlot, 0, toolbarItems.length - 1, 0);
+    if (toolbarItems[inventoryTargetSlot] && toolbarItems[inventoryTargetSlot].type !== "block") {
+      inventoryTargetSlot = 0;
+    }
+    refreshSelectedItemState();
+
+    animals.length = 0;
+    if (Array.isArray(saveData.animals)) {
+      for (const entry of saveData.animals.slice(0, 64)) {
+        if (!entry || typeof entry !== "object") continue;
+        if (!Object.prototype.hasOwnProperty.call(animalTypes, entry.type)) continue;
+        animals.push({
+          type: entry.type,
+          x: clampNumber(entry.x, 0, WORLD_X - 1, WORLD_X / 2),
+          y: clampNumber(entry.y, 0, WORLD_Y - 1, WATER_LEVEL + 2),
+          z: clampNumber(entry.z, 0, WORLD_Z - 1, WORLD_Z / 2),
+          dir: clampNumber(entry.dir, -1e6, 1e6, 0),
+          turnTimer: clampNumber(entry.turnTimer, -100, 100, randomRange(0.8, 2.2)),
+          pauseTimer: clampNumber(entry.pauseTimer, -100, 100, randomRange(0.1, 0.8)),
+          stepPhase: clampNumber(entry.stepPhase, -1e6, 1e6, randomRange(0, Math.PI * 2)),
+          vy: clampNumber(entry.vy, -30, 30, 0),
+        });
+      }
+    }
+
+    keys.clear();
+    miningActive = false;
+    miningTimer = 0;
+    pendingMineOnLock = false;
+    autosaveTimer = 0;
+    if (Number.isFinite(saveData.savedAt)) {
+      lastSaveAtUnix = saveData.savedAt;
+    }
+    saveStatusText = reason === "startup" ? "loaded autosave" : "loaded";
+    return true;
+  }
+
   function castRay(ox, oy, oz, dx, dy, dz, maxDist) {
     let x = Math.floor(ox);
     let y = Math.floor(oy);
@@ -1401,6 +1653,73 @@
     return false;
   }
 
+  function findSafeRespawn(preferredX, preferredZ) {
+    const startX = Math.max(1, Math.min(WORLD_X - 2, Math.floor(preferredX)));
+    const startZ = Math.max(1, Math.min(WORLD_Z - 2, Math.floor(preferredZ)));
+    const maxRadius = Math.max(WORLD_X, WORLD_Z);
+
+    for (let radius = 0; radius <= maxRadius; radius++) {
+      for (let dz = -radius; dz <= radius; dz++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dz)) !== radius) continue;
+          const x = startX + dx;
+          const z = startZ + dz;
+          if (x < 1 || x > WORLD_X - 2 || z < 1 || z > WORLD_Z - 2) continue;
+
+          const topY = findTopSolidY(x, z);
+          if (topY < 1 || topY >= WORLD_Y - 2) continue;
+
+          const spawn = {
+            x: x + 0.5,
+            y: topY + 1.001,
+            z: z + 0.5,
+          };
+
+          if (!collidesAt(spawn.x, spawn.y, spawn.z)) {
+            return spawn;
+          }
+        }
+      }
+    }
+
+    return null;
+  }
+
+  function respawnPlayer(preferredX, preferredZ) {
+    const fallback = {
+      x: WORLD_X * 0.5,
+      y: WORLD_Y - player.height - 1.001,
+      z: WORLD_Z * 0.5,
+    };
+    const spawn = findSafeRespawn(preferredX, preferredZ) || fallback;
+
+    player.x = spawn.x;
+    player.y = spawn.y;
+    player.z = spawn.z;
+    player.vx = 0;
+    player.vy = 0;
+    player.vz = 0;
+    player.onGround = false;
+
+    while (collidesAt(player.x, player.y, player.z) && player.y < WORLD_Y - 2) {
+      player.y += 1;
+    }
+  }
+
+  function ensurePlayerInOpenSpace() {
+    player.x = clampNumber(player.x, 1, WORLD_X - 2, WORLD_X / 2);
+    player.z = clampNumber(player.z, 1, WORLD_Z - 2, WORLD_Z / 2);
+    player.y = clampNumber(player.y, 1, WORLD_Y - 1, 18);
+
+    while (collidesAt(player.x, player.y, player.z) && player.y < WORLD_Y - 2) {
+      player.y += 1;
+    }
+
+    if (collidesAt(player.x, player.y, player.z)) {
+      respawnPlayer(player.x, player.z);
+    }
+  }
+
   function tryMove(dt) {
     player.onGround = false;
 
@@ -1433,8 +1752,7 @@
     }
 
     if (player.y < 0) {
-      player.y = WORLD_Y - 1;
-      player.vy = 0;
+      respawnPlayer(player.x, player.z);
     }
   }
 
@@ -2080,6 +2398,7 @@
   function mineTargetBlock() {
     const hit = traceRayTarget(8, true);
     if (!hit) return false;
+    if (hit.y <= 0) return false;
 
     hitFlash = 1;
     playMineSound();
@@ -2149,6 +2468,20 @@
         stopBackgroundMusic();
       } else {
         startBackgroundMusic();
+      }
+      return;
+    }
+    if (e.code === "KeyK") {
+      e.preventDefault();
+      saveGameSnapshot("manual");
+      return;
+    }
+    if (e.code === "KeyL") {
+      e.preventDefault();
+      if (loadGameSnapshot("manual")) {
+        ensurePlayerInOpenSpace();
+        renderToolbar();
+        renderInventory();
       }
       return;
     }
@@ -2248,6 +2581,7 @@
   function updateDebugText() {
     const target = traceRayTarget(8, true);
     const targetText = target ? `${target.x},${target.y},${target.z}` : "none";
+    const saveAge = lastSaveAtUnix ? `${Math.max(0, Math.floor((Date.now() - lastSaveAtUnix) / 1000))}s` : "never";
     debugEl.textContent = [
       `seed ${WORLD_SEED_TEXT} (#${WORLD_SEED})`,
       `x ${player.x.toFixed(2)}`,
@@ -2259,6 +2593,7 @@
       `weather ${weather.type} ${Math.ceil(Math.max(0, weather.timer))}s`,
       `snow ${getSnowCoveragePercent()}%`,
       `animals ${animals.length}`,
+      `save ${saveStatusText} (${saveAge})`,
       `target ${targetText}`,
     ].join(" | ");
   }
@@ -2280,6 +2615,12 @@
     swingAnim = Math.max(0, swingAnim - dt * 6);
     swingPulse += dt * (usingPickaxe() ? 1.2 : 0.85);
     hitFlash = Math.max(0, hitFlash - dt * 5.2);
+
+    autosaveTimer += dt;
+    if (autosaveTimer >= AUTOSAVE_INTERVAL_SECONDS) {
+      autosaveTimer = 0;
+      saveGameSnapshot("autosave");
+    }
   }
 
   function renderGameToText() {
@@ -2315,6 +2656,10 @@
         type: weather.type,
         seconds_remaining: Number(Math.max(0, weather.timer).toFixed(1)),
         snow_cover_percent: getSnowCoveragePercent(),
+      },
+      save: {
+        status: saveStatusText,
+        last_saved_at: lastSaveAtUnix || null,
       },
       target: target
         ? { x: target.x, y: target.y, z: target.z, block: getBlockName(target.block) }
@@ -2403,9 +2748,19 @@
   refreshSelectedItemState();
   renderToolbar();
 
-  while (collidesAt(player.x, player.y, player.z) && player.y < WORLD_Y - 2) {
-    player.y += 1;
+  if (!loadGameSnapshot("startup")) {
+    saveGameSnapshot("autosave");
   }
+  ensurePlayerInOpenSpace();
+
+  window.addEventListener("beforeunload", () => {
+    saveGameSnapshot("autosave");
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      saveGameSnapshot("autosave");
+    }
+  });
 
   overlay.addEventListener("click", () => {
     ensureBackgroundMusic();

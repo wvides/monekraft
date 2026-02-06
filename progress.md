@@ -125,3 +125,37 @@ Original prompt: I want the game to also have a calming music in the brackground
 
 ## TODO Next Agent
 - Install/enable `playwright`, run the skill client against a running local server, and confirm screenshots/text state show stable terrain for repeated runs of the same `seed` and changed terrain for different seeds.
+
+## Update 11
+- Fixed void-fall loop after mining the lowest layer:
+  - Prevented mining bottom-layer blocks (`y <= 0`) in `mineTargetBlock()`.
+  - Replaced void recovery teleport (`WORLD_Y - 1`) with safe-ground respawn logic.
+  - Added `findSafeRespawn(preferredX, preferredZ)` to locate the nearest non-colliding surface spawn.
+  - Added `respawnPlayer(preferredX, preferredZ)` to reset position/velocity safely after falling below world.
+
+## Test Notes (Update 11)
+- `node --check game.js` passes.
+- Ran Playwright skill client command:
+  - `node "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url http://127.0.0.1:8000 --actions-file "$HOME/.codex/skills/develop-web-game/references/action_payloads.json" --iterations 1 --pause-ms 200`
+- Playwright validation remains blocked in this environment: `ERR_MODULE_NOT_FOUND: Cannot find package 'playwright'`.
+
+## Update 12
+- Added clearer block separation lines in the voxel renderer by drawing subtle face-edge outlines directly in the raycast shading pass.
+- Extended `castRay()` to return face UV coordinates (`u`, `v`) and accurate hit distance for the entered face.
+- Applied stronger edge contrast on bottom faces so vertical stack separation remains visible while mining downward.
+
+## Test Notes (Update 12)
+- `node --check game.js` passes.
+- Ran Playwright skill client command:
+  - `node "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url http://127.0.0.1:8000 --actions-file "$HOME/.codex/skills/develop-web-game/references/action_payloads.json" --iterations 1 --pause-ms 200`
+- Playwright validation remains blocked in this environment: `ERR_MODULE_NOT_FOUND: Cannot find package 'playwright'`.
+
+## TODO Next Agent
+- Install/enable `playwright` and run the skill client to capture gameplay screenshots, then verify block-edge visibility while mining bottom-facing/near-bottom surfaces.
+
+## Update 13
+- Removed the recently added block face outline/border shading from the voxel render pass.
+- Reverted `castRay()` UV/edge helper additions that were only used for block border rendering.
+
+## Test Notes (Update 13)
+- `node --check game.js` passes.
