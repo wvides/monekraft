@@ -1612,20 +1612,22 @@
       const syScreen = RENDER_H * 0.5 - (viewY / (viewZ * tanHalfFov)) * (RENDER_H * 0.5);
       if (sx < -30 || sx > RENDER_W + 30 || syScreen < -30 || syScreen > RENDER_H + 30) continue;
 
-      // Use actual distance for size, not viewZ
-      drawList.push({ animal, sx, sy: syScreen, depth: viewZ, dist: dist });
+      // Pass viewZ for size calculation (matches perspective projection)
+      drawList.push({ animal, sx, sy: syScreen, depth: viewZ });
     }
 
     drawList.sort((a, b) => b.depth - a.depth);
     for (const entry of drawList) {
-      drawAnimal(entry.animal, entry.sx, entry.sy, entry.dist);
+      drawAnimal(entry.animal, entry.sx, entry.sy, entry.depth);
     }
   }
 
-  function drawAnimal(animal, sx, sy, dist) {
+  function drawAnimal(animal, sx, sy, viewZ) {
     const palette = animalTypes[animal.type];
-    // Size based on distance - larger when close, smaller when far
-    const size = Math.max(5, Math.min(45, (38 / Math.max(1, dist)) * palette.scale));
+    // Size based on viewZ (camera depth) - matches perspective projection
+    // Larger when close (small viewZ), smaller when far (large viewZ)
+    const baseSize = 70;
+    const size = Math.max(8, Math.min(55, (baseSize * palette.scale) / Math.max(1.2, viewZ)));
     const bob = Math.sin(animal.stepPhase * 2.2) * (size * 0.04);
     const step = Math.sin(animal.stepPhase * 6.2) * (size * 0.06);
     const facing = Math.sin(animal.dir - player.yaw) >= 0 ? 1 : -1;
