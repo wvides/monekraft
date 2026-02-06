@@ -815,7 +815,7 @@
       scale: 1.28,
     },
   };
-  const animalNames = [];
+  const animalNames = ["pig", "sheep", "chicken", "pig", "sheep", "chicken"];
   const animals = [];
 
   let audioContext = null;
@@ -1092,7 +1092,7 @@
     lfoGain.connect(filter.frequency);
 
     const windGain = audioContext.createGain();
-    windGain.gain.value = 0.025;
+    windGain.gain.value = 0.055;
 
     src.connect(filter);
     filter.connect(windGain);
@@ -1119,7 +1119,7 @@
         const midiNote = pickRandomNote(baseNote, scale);
         const freq = midiToFreq(midiNote);
         const duration = 4 + Math.random() * 6;
-        const volume = 0.015 + Math.random() * 0.01;
+        const volume = 0.04 + Math.random() * 0.025;
         createAmbientPad(freq, duration, volume);
       }, delay * 1000);
     }
